@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+    #drop-area {
+      border: 2px dashed #ccc;
+      padding: 30px;
+      text-align: center;
+      margin-top: 20px;
+    }
+    #runButton {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <input type="file" id="fileInput" />
+  <button id="runButton" disabled>Run File</button>
+  <div id="drop-area">Drop file here</div>
+
+  <script>
+    let currentFile = null;
+
+    function runFile(file) {
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const content = e.target.result;
+        const win = window.open("about:blank", "_blank");
+        win.document.open();
+        win.document.write(content);
+        win.document.close();
+      };
+      reader.readAsText(file);
+    }
+
+    document.getElementById('fileInput').addEventListener('change', function (e) {
+      if (e.target.files.length > 0) {
+        currentFile = e.target.files[0];
+        document.getElementById('runButton').disabled = false;
+      }
+    });
+
+    document.getElementById('runButton').addEventListener('click', function () {
+      if (currentFile) {
+        runFile(currentFile);
+      }
+    });
+
+    // Drag and Drop Support
+    const dropArea = document.getElementById('drop-area');
+    dropArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropArea.style.borderColor = '#000';
+    });
+
+    dropArea.addEventListener('dragleave', () => {
+      dropArea.style.borderColor = '#ccc';
+    });
+
+    dropArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropArea.style.borderColor = '#ccc';
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        currentFile = file;
+        document.getElementById('runButton').disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
