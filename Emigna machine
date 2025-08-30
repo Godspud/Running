@@ -1,0 +1,79 @@
+<iframe srcdoc="
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset='UTF-8'>
+  <style>
+    body { background:#000; color:#fff; font-family:monospace; padding:1em; }
+    input, textarea { background:#fff; color:#000; width:100%; margin:5px 0; padding:5px; border:1px solid #aaa; }
+    button { background:#fff; color:#111; padding:10px; font-weight:bold; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <h2>Enigma Cipher</h2>
+  Message: <input id='msg'>
+  Seed: <input id='seed'>
+  Plugboard (AM GL ET): <input id='plug'>
+  <button onclick='go()'>Encrypt</button>
+  <p>Cipher: <textarea id='cipher' readonly></textarea></p>
+  <p>Decrypted: <textarea id='plain' readonly></textarea></p>
+  <script>
+    const ABC='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const ROTORS={I:{w:'EKMFLGDQVZNTOWYHXUSPAIBRCJ',n:'Q'},
+                  II:{w:'AJDKSIRUXBLHWTMCQGZNPYFVOE',n:'E'},
+                  III:{w:'BDFHJLCPRTXVZNYEIWGAKMUSQO',n:'V'}};
+    const REFLECT='YRUHQSLDPXNGOKMIEBFZCWVJAT';
+
+    function getSeedPos(seed){
+      let h=0; for(let i=0;i<seed.length;i++) h=(h<<5)-h+seed.charCodeAt(i);
+      h=Math.abs(h); let p=''; for(let i=0;i<3;i++) p+=ABC[h%26], h=Math.floor(h/26);
+      return p;
+    }
+
+    function Rotor(w,n,pos){
+      this.w=w; this.n=n; this.p=ABC.indexOf(pos);
+      this.step=()=>{ this.p=(this.p+1)%26 };
+      this.atNotch=()=>ABC[this.p]===this.n;
+      this.fwd=c=>ABC[(w.charCodeAt((ABC.indexOf(c)+this.p)%26)-65-this.p+26)%26];
+      this.bwd=c=>ABC[(w.indexOf(ABC[(ABC.indexOf(c)+this.p)%26])-this.p+26)%26];
+    }
+
+    function plugboard(pairs){
+      let pb={}; ABC.split('').forEach(c=>pb[c]=c);
+      for(let pair of pairs.split(' ')){
+        if(pair.length===2){ pb[pair[0]]=pair[1]; pb[pair[1]]=pair[0]; }
+      } return pb;
+    }
+
+    function enigma(msg,seed,plug){
+      let pos=getSeedPos(seed), pb=plugboard(plug);
+      let r=[new Rotor(ROTORS.I.w,ROTORS.I.n,pos[0]),
+             new Rotor(ROTORS.II.w,ROTORS.II.n,pos[1]),
+             new Rotor(ROTORS.III.w,ROTORS.III.n,pos[2])];
+      let out='';
+      for(let c of msg.toUpperCase()){
+        if(!ABC.includes(c)) continue;
+        if(r[2].atNotch()) r[1].step();
+        if(r[1].atNotch()) r[0].step();
+        r[2].step();
+        c=pb[c];
+        c=r[2].fwd(c); c=r[1].fwd(c); c=r[0].fwd(c);
+        c=REFLECT[ABC.indexOf(c)];
+        c=r[0].bwd(c); c=r[1].bwd(c); c=r[2].bwd(c);
+        c=pb[c];
+        out+=c;
+      }
+      return out;
+    }
+
+    function go(){
+      let m=document.getElementById('msg').value;
+      let s=document.getElementById('seed').value;
+      let p=document.getElementById('plug').value;
+      let cipher=enigma(m,s,p);
+      document.getElementById('cipher').value=cipher;
+      document.getElementById('plain').value=enigma(cipher,s,p);
+    }
+  </script>
+</body>
+</html>" width="100%" height="600px" style="border:none;"></iframe>
