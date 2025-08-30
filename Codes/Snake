@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snake Game with Mods</title>
+<style>
+body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    background-color: #222;
+    font-family: Arial, sans-serif;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+canvas {
+    background-color: #000;
+    border: 2px solid #0f0;
+    margin-bottom: 10px;
+}
+.controls {
+    display: grid;
+    grid-template-columns: repeat(3, 50px);
+    grid-template-rows: repeat(3, 50px);
+    gap: 5px;
+    margin-bottom: 10px;
+}
+.controls button {
+    width: 50px;
+    height: 50px;
+    font-size: 18px;
+    background-color: #0f0;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+}
+.controls button:disabled {
+    background-color: #555;
+    cursor: default;
+}
+.mods {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+.mods label {
+    color: #0f0;
+    cursor: pointer;
+}
+</style>
+</head>
+<body oncontextmenu="return false">
+
+<canvas id="gameCanvas" width="400" height="400"></canvas>
+
+<div class="controls">
+    <div></div>
+    <button onclick="changeDirection('UP')">↑</button>
+    <div></div>
+    <button onclick="changeDirection('LEFT')">←</button>
+    <div></div>
+    <button onclick="changeDirection('RIGHT')">→</button>
+    <div></div>
+    <button onclick="changeDirection('DOWN')">↓</button>
+    <div></div>
+</div>
+
+<div class="mods">
+    <label><input type="checkbox" id="walls" checked> Walls</label>
+    <label><input type="checkbox" id="superfood"> Superfood</label>
+    <label><input type="checkbox" id="poison"> Poison</label>
+    <label><input type="checkbox" id="obstacles"> Obstacles</label>
+    <label>Speed: 
+        <select id="speed">
+            <option value="150">Normal</option>
+            <option value="100">Fast</option>
+            <option value="200">Slow</option>
+        </select>
+    </label>
+</div>
+
+<script>
+document.addEventListener('keydown', function(e) {
+    if (e.key === "F12" || 
+        (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "J" || e.key === "C")) || 
+        (e.ctrlKey && e.key === "U")) {
+        e.preventDefault();
+    }
+});
+
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const box = 20;
+const canvasSize = 400;
+let snake = [{ x: 8*box, y: 8*box }];
+let food = spawnFood();
+let obstacles = [];
+let score = 0;
+let direction;
+let intervalTime = 150;
+const wallsEnabled = document.getElementById("walls");
+const superfoodEnabled = document.getElementById("superfood");
+const poisonEnabled = document.getElementById("poison");
+const obstaclesEnabled = document.getElementById("obstacles");
+const speedSelect = document.getElementById("speed");
+
+document.addEventListener("keydown", function(event){
+    if(event.key === "ArrowLeft" || event.key === "a") changeDirection("LEFT");
+    if(event.key === "ArrowUp" || event.key === "w") changeDirection("UP");
+    if(event.key === "ArrowRight" || event.key === "d") changeDirection("RIGHT");
+    if(event.key === "ArrowDown" || event.key === "s") changeDirection("DOWN");
+});
+
+function changeDirection(dir){
+    if(dir === "LEFT" && direction !== "RIGHT") direction="LEFT";
+    if(dir === "UP" && direction !== "DOWN") direction="UP";
+    if(dir === "RIGHT" && direction !== "LEFT") direction="RIGHT";
+    if(dir === "DOWN" && direction !== "UP") direction="DOWN";
+}
+
+function spawnFood() {
+    return { x: Math.floor(Math.random() * (canvasSize/box)) * box,
+             y: Math.floor(Math.random() * (canvasSize/box)) * box,
+             type: Math.random() < 0.1 ? 'super' : 'normal' };
+}
+
+function spawnObstacle() {
+    let x = Math.floor(Math.random() * (canvasSize/box)) * box;
+    let y = Math.floor(Math.random() * (canvasSize/box)) * box;
+    obstacles.push({x,y});
+}
+
+function draw() {
+    ctx.fillStyle="#000";
+    ctx.fillRect(0,0,canvasSize,canvasSize);
+
+    for(let i=0;i<snake.length;i++){
+        ctx.fillStyle = i===0 ? "#0f0" : "#00ff00";
+        ctx.fillRect(snake[i].x,snake[i].y,box,box);
+    }
+
+    ctx.fillStyle = food.type==='super' ? "#ff0" : "#f00";
+    ctx.fillRect(food.x, food.y, box, box);
+
+    if(obstaclesEnabled.checked){
+        ctx.fillStyle="#888";
+        for(let obs of obstacles){
+            ctx.fillRect(obs.x, obs.y, box, box);
+        }
+    }
+
+    let snakeX = snake[0].x;
+    let snakeY = snake[0].y;
+
+    if(direction==="LEFT") snakeX -= box;
+    if(direction==="UP") snakeY -= box;
+    if(direction==="RIGHT") snakeX += box;
+    if(direction==="DOWN") snakeY += box;
+
+    if(wallsEnabled.checked){
+        if(snakeX<0||snakeY<0||snakeX>=canvasSize||snakeY>=canvasSize||collision({x:snakeX,y:snakeY},snake)||collision({x:snakeX,y:snakeY},obstacles)){
+            resetGame();
+            return;
+        }
+    } else {
+        if(snakeX<0) snakeX = canvasSize-box;
+        if(snakeY<0) snakeY = canvasSize-box;
+        if(snakeX>=canvasSize) snakeX = 0;
+        if(snakeY>=canvasSize) snakeY = 0;
+    }
+
+    let newHead = {x:snakeX, y:snakeY};
+
+    if(snakeX===food.x && snakeY===food.y){
+        score += food.type==='super' ? 5 : 1;
+        food = spawnFood();
+        if(obstaclesEnabled.checked && Math.random()<0.2) spawnObstacle();
+    } else {
+        snake.pop();
+    }
+
+    if(poisonEnabled.checked && Math.random()<0.02){
+        let px = Math.floor(Math.random() * (canvasSize/box)) * box;
+        let py = Math.floor(Math.random() * (canvasSize/box)) * box;
+        if(!collision({x:px,y:py},snake)) snake.pop();
+    }
+
+    snake.unshift(newHead);
+
+    ctx.fillStyle="#0f0";
+    ctx.font="20px Arial";
+    ctx.fillText("Score: "+score, 10, 20);
+}
+
+function collision(head,array){
+    for(let i=0;i<array.length;i++){
+        if(head.x===array[i].x && head.y===array[i].y) return true;
+    }
+    return false;
+}
+
+function resetGame(){
+    alert("Game Over! Score: "+score);
+    snake=[{x:8*box,y:8*box}];
+    score=0;
+    direction=undefined;
+    obstacles=[];
+}
+
+function updateInterval(){
+    clearInterval(game);
+    intervalTime = parseInt(speedSelect.value);
+    game = setInterval(draw, intervalTime);
+}
+
+speedSelect.addEventListener('change', updateInterval);
+
+let game = setInterval(draw, intervalTime);
+</script>
+</body>
+</html>
