@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset='UTF-8'>
+<meta charset="UTF-8">
 <style>
 body { background:#000; color:#fff; font-family:monospace; padding:1em; }
 input, textarea { background:#fff; color:#000; width:100%; margin:5px 0; padding:5px; border:1px solid #aaa; }
@@ -10,72 +10,150 @@ button { background:#fff; color:#111; padding:10px; font-weight:bold; cursor:poi
 </head>
 <body>
 <h2>Enigma Cipher</h2>
-Message: <input id="message">
-Seed: <input id="seed">
-Plugboard (AM GL ET): <input id="plug">
+Message: <input id="message"><br>
+Seed: <input id="seed"><br>
+Plugboard (AM GL ET): <input id="plug"><br>
 <button onclick="encryptDecrypt()">Encrypt / Decrypt</button>
 <p>Cipher: <textarea id="cipher" readonly></textarea></p>
 <p>Decrypted: <textarea id="plain" readonly></textarea></p>
 
 <script>
+// Full ASCII alphabet used in this Enigma
 const ABC = ' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
-const ROTORS = {
-  I: { wiring: ABC.split('').sort(() => Math.random()-0.5).join(''), notch: ABC[10] },
-  II: { wiring: ABC.split('').sort(() => Math.random()-0.5).join(''), notch: ABC[20] },
-  III: { wiring: ABC.split('').sort(() => Math.random()-0.5).join(''), notch: ABC[30] }
-};
-const REFLECTOR = ABC.split('').reverse().join('');
 
+// Function to shuffle an array deterministically with a seed
+function shuffleArray(array, seed) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h << 5) - h + seed.charCodeAt(i);
+  h = Math.abs(h);
+  const arr = array.slice();
+  for (let i = arr.length - 1; i > 0; i--) {
+    h = (h * 9301 + 49297) % 233280;
+    let j = Math.floor(h / 233280 * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.join('');
+}
+
+// Generate rotor wirings deterministically
+function generateRotor(seed) {
+  return shuffleArray(ABC.split(''), seed);
+}
+
+// Generate a simple reflector involution
+function generateReflector(seed) {
+  let chars = ABC.split('');
+  let pairs = {};
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h << 5) - h + seed.charCodeAt(i);
+  h = Math.abs(h);
+  while (chars.length) {
+    if (chars.length === 1) {
+      let c = chars.pop();
+      pairs[c] = c; // map to itself if odd
+      continue;
+    }
+    h = (h * 9301 + 49297) % 233280;
+    let idx1 = Math.floor(h / 233280 * chars.length);
+    let c1 = chars.splice(idx1, 1)[0];
+    h = (h * 9301 + 49297) % 233280;
+    let idx2 = Math.floor(h / 233280 * chars.length);
+    let c2 = chars.splice(idx2, 1)[0];
+    pairs[c1] = c2;
+    pairs[c2] = c1;
+  }
+  return ABC.split('').map(c => pairs[c]).join('');
+}
+
+// Convert seed to rotor starting positions
 function getSeedPositions(seed){
-  let h=0; for(let i=0;i<seed.length;i++) h=(h<<5)-h+seed.charCodeAt(i);
-  h=Math.abs(h); let p=''; for(let i=0;i<3;i++){ p+=ABC[h%ABC.length]; h=Math.floor(h/ABC.length); } 
+  let h = 0;
+  for(let i=0; i<seed.length; i++) h = (h<<5) - h + seed.charCodeAt(i);
+  h = Math.abs(h);
+  let p = '';
+  for(let i=0; i<3; i++){
+    p += ABC[h % ABC.length];
+    h = Math.floor(h / ABC.length);
+  }
   return p;
 }
 
+// Rotor class
 function Rotor(wiring, notch, position){
-  this.wiring=wiring;
-  this.notch=notch;
-  this.position=ABC.indexOf(position);
-  this.step=()=>{ this.position=(this.position+1)%ABC.length };
-  this.atNotch=()=>ABC[this.position]===this.notch;
-  this.forward=c=>ABC[(wiring.indexOf(c)+this.position)%ABC.length];
-  this.backward=c=>ABC[(wiring.indexOf(c)-this.position+ABC.length)%ABC.length];
+  this.wiring = wiring;
+  this.notch = notch;
+  this.position = ABC.indexOf(position);
+
+  this.step = ()=>{ this.position = (this.position + 1) % ABC.length; };
+  this.atNotch = ()=> ABC[this.position] === this.notch;
+
+  // Forward mapping
+  this.forward = c => {
+    let i = (ABC.indexOf(c) + this.position) % ABC.length;
+    return wiring[i];
+  };
+
+  // Backward mapping
+  this.backward = c => {
+    let i = wiring.indexOf(c);
+    i = (i - this.position + ABC.length) % ABC.length;
+    return ABC[i];
+  };
 }
 
+// Plugboard
 function plugboardSetup(pairs){
-  let pb={}; ABC.split('').forEach(c=>pb[c]=c);
+  let pb = {};
+  ABC.split('').forEach(c => pb[c] = c);
   for(let pair of pairs.split(' ')){
-    if(pair.length===2){ pb[pair[0]]=pair[1]; pb[pair[1]]=pair[0]; }
+    if(pair.length === 2){ pb[pair[0]] = pair[1]; pb[pair[1]] = pair[0]; }
   }
   return pb;
 }
 
+// Enigma encrypt/decrypt
 function enigma(message, seed, plugboardPairs){
-  const pos=getSeedPositions(seed);
-  const pb=plugboardSetup(plugboardPairs);
-  const rotors=[ new Rotor(ROTORS.I.wiring, ROTORS.I.notch, pos[0]),
-                 new Rotor(ROTORS.II.wiring, ROTORS.II.notch, pos[1]),
-                 new Rotor(ROTORS.III.wiring, ROTORS.III.notch, pos[2]) ];
-  let output='';
+  // Generate rotor wirings and reflector based on seed (deterministic)
+  const rotor1W = generateRotor(seed + '1');
+  const rotor2W = generateRotor(seed + '2');
+  const rotor3W = generateRotor(seed + '3');
+  const reflector = generateReflector(seed + 'R');
+
+  const pos = getSeedPositions(seed);
+  const pb = plugboardSetup(plugboardPairs);
+  const rotors = [
+    new Rotor(rotor1W, pos[0], pos[0]),
+    new Rotor(rotor2W, pos[1], pos[1]),
+    new Rotor(rotor3W, pos[2], pos[2])
+  ];
+
+  let output = '';
   for(let c of message){
     if(rotors[2].atNotch()) rotors[1].step();
     if(rotors[1].atNotch()) rotors[0].step();
     rotors[2].step();
 
     c = pb[c] || c;
-    c = rotors[2].forward(c); c = rotors[1].forward(c); c = rotors[0].forward(c);
-    c = REFLECTOR[ABC.indexOf(c)];
-    c = rotors[0].backward(c); c = rotors[1].backward(c); c = rotors[2].backward(c);
+    c = rotors[2].forward(c);
+    c = rotors[1].forward(c);
+    c = rotors[0].forward(c);
+    c = reflector[ABC.indexOf(c)];
+    c = rotors[0].backward(c);
+    c = rotors[1].backward(c);
+    c = rotors[2].backward(c);
     c = pb[c] || c;
 
     output += c;
   }
+
   return output;
 }
 
+// Button handler
 function encryptDecrypt(){
   const msg = document.getElementById('message').value;
-  const seed = document.getElementById('seed').value;
+  let seed = document.getElementById('seed').value;
+  if(!seed) seed = 'secret';
   const plug = document.getElementById('plug').value;
   const cipher = enigma(msg, seed, plug);
   document.getElementById('cipher').value = cipher;
